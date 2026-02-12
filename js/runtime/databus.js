@@ -9,9 +9,10 @@ export default class DataBus {
       const savedData = wx.getStorageSync('playerData')
       if (savedData) {
         this.coins = savedData.coins || 0
-        this.crystals = savedData.crystals || 0 // 新增：能量水晶
+        this.crystals = savedData.crystals || 0
         this.ownedPlanes = savedData.ownedPlanes || [] 
         this.currentPlaneIndex = savedData.currentPlaneIndex || 0
+        this.maxLevelReached = savedData.maxLevelReached || 1 
       } else {
         this.initNewUser()
       }
@@ -19,17 +20,11 @@ export default class DataBus {
       this.initNewUser()
     }
 
-    // 兜底逻辑
     if (!this.ownedPlanes || this.ownedPlanes.length === 0) {
-        this.ownedPlanes = [{name: '伊阿宋 (Jason)', rank: 'R', level: 1}]
+        this.ownedPlanes = [{name: '伊阿宋', rank: 'R', level: 1}]
         this.currentPlaneIndex = 0
     }
     
-    // 数据迁移：给老存档的飞机加上 level 属性
-    this.ownedPlanes.forEach(p => {
-        if (!p.level) p.level = 1
-    })
-
     this.reset()
   }
 
@@ -38,6 +33,7 @@ export default class DataBus {
     this.crystals = 0
     this.ownedPlanes = []
     this.currentPlaneIndex = 0
+    this.maxLevelReached = 1
   }
 
   saveData() {
@@ -45,20 +41,22 @@ export default class DataBus {
       coins: this.coins,
       crystals: this.crystals,
       ownedPlanes: this.ownedPlanes,
-      currentPlaneIndex: this.currentPlaneIndex
+      currentPlaneIndex: this.currentPlaneIndex,
+      maxLevelReached: this.maxLevelReached
     })
   }
 
   reset() {
     this.frame = 0
     this.score = 0
-    this.highScore = 0
-    this.hp = 100 // 默认值，会被 Player 覆盖
+    this.hp = 100 
     this.gameStatus = 'start'
     this.bossActive = false
-    this.combo = 0
-    this.canRevive = true
     this.shakeTimer = 0
+    
+    this.currentLevel = this.currentLevel || 1 
+    this.levelTime = 0 // 必须为0，确保计时器从头开始
+    
     this.bullets = []
     this.enemies = []
     this.enemyBullets = []
