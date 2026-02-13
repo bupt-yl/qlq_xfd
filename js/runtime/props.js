@@ -45,52 +45,133 @@ export class Bullet {
   }
 }
 
+// 肉鸽强化选项定义
+export const UPGRADE_DEFINITIONS = {
+  bulletDamage: {
+    name: '子弹强化',
+    icon: '💥',
+    description: '提升所有子弹伤害 15%',
+    maxLevel: 5,
+    bonusPerLevel: 0.15,
+    maxBonusDescription: '满级：伤害 +100%'
+  },
+  fireRate: {
+    name: '极速射击',
+    icon: '⚡',
+    description: '提升射击速度 10%',
+    maxLevel: 5,
+    bonusPerLevel: 0.10,
+    maxBonusDescription: '满级：射速 +50%'
+  },
+  laserFocus: {
+    name: '激光聚焦',
+    icon: '🔆',
+    description: '武器伤害 +25%',
+    maxLevel: 5,
+    bonusPerLevel: 0.25,
+    maxBonusDescription: '满级：武器伤害 +125%'
+  },
+  multiShot: {
+    name: '多重弹幕',
+    icon: '🎯',
+    description: '增加同时发射的子弹数量',
+    maxLevel: 5,
+    bonusPerLevel: 1,
+    maxBonusDescription: '满级：同时发射 +5发子弹'
+  },
+  shieldRegen: {
+    name: '护盾回复',
+    icon: '🛡️',
+    description: '击杀敌人有 5% 概率获得护盾',
+    maxLevel: 5,
+    bonusPerLevel: 0.05,
+    maxBonusDescription: '满级：25% 概率获得护盾'
+  },
+  criticalHit: {
+    name: '致命打击',
+    icon: '⭐',
+    description: '暴击率 +8%，暴击伤害 +50%',
+    maxLevel: 5,
+    bonusPerLevel: 0.08,
+    maxBonusDescription: '满级：暴击率 +40%'
+  }
+}
+
+// 获取可用的强化选项（排除已满级的）
+export function getAvailableUpgrades(count = 3, currentLevels) {
+  const keys = Object.keys(UPGRADE_DEFINITIONS)
+  // 过滤掉已满级的强化
+  const availableKeys = keys.filter(key => {
+    const def = UPGRADE_DEFINITIONS[key]
+    const currentLevel = currentLevels[key] || 0
+    return currentLevel < def.maxLevel
+  })
+
+  // 如果没有可用的强化选项，返回空数组
+  if (availableKeys.length === 0) {
+    return []
+  }
+
+  // 如果可选项不足请求的数量，只返回实际可用的数量
+  const actualCount = Math.min(count, availableKeys.length)
+
+  const shuffled = availableKeys.sort(() => Math.random() - 0.5)
+  return shuffled.slice(0, actualCount).map(key => ({
+    id: key,
+    ...UPGRADE_DEFINITIONS[key]
+  }))
+}
+
 export class Drop {
   constructor(x, y) {
     this.x = x; this.y = y; this.width = 32; this.height = 32; this.speed = 2; this.remove = false
+
+    // 10% 概率掉落生命值，其他不掉落
     const rand = Math.random()
-    // === 修改：加入水晶掉落 ===
-    if (rand < 0.20) this.type = 'crystal' // 20% 概率直接掉水晶
-    else if (rand < 0.30) this.type = 'health'
-    else if (rand < 0.40) this.type = 'shield'
-    else if (rand < 0.50) this.type = 'wingman'
-    else {
-        // 武器掉落
-        const wRand = Math.random()
-        if (wRand < 0.1) this.type = 'heavy'
-        else if (wRand < 0.2) this.type = 'laser'
-        else if (wRand < 0.3) this.type = 'homing'
-        else if (wRand < 0.4) this.type = 'plasma'
-        else if (wRand < 0.5) this.type = 'rapid'
-        else if (wRand < 0.6) this.type = 'snipe'
-        else if (wRand < 0.7) this.type = 'shuriken'
-        else if (wRand < 0.8) this.type = 'bubble'
-        else this.type = 'pulse'
+    if (rand < 0.10) {
+      this.type = 'health'
+      this.icon = '💚'
+    } else {
+      this.type = 'none'
+      this.remove = true // 其他情况不生成掉落物
     }
   }
   update(player) {
     this.y += this.speed
     if (player) {
       let dx = player.x - this.x; let dy = player.y - this.y
-      if (Math.sqrt(dx * dx + dy * dy) < 150) { // 稍微加大吸附范围
-          this.x += dx * 0.1; this.y += dy * 0.1 
+      if (Math.sqrt(dx * dx + dy * dy) < 150) {
+          this.x += dx * 0.1; this.y += dy * 0.1
       }
     }
     if (this.y > 1000) this.remove = true
   }
   render(ctx) {
     ctx.save(); ctx.translate(this.x + 16, this.y + 16)
-    let color = COLORS.dropWeapon; let icon = '🔴'
-    
-    if (this.type === 'crystal') { color = COLORS.crystal; icon = '💎' }
-    else if (this.type === 'health') { color = COLORS.dropHealth; icon = '💚' }
-    else if (this.type === 'shield') { color = COLORS.shield; icon = '🛡️' }
-    else if (this.type === 'wingman') { color = COLORS.wingman; icon = '🛸' }
-    
-    ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 15
-    ctx.beginPath(); ctx.arc(0, 0, 16, 0, Math.PI * 2); ctx.fill()
-    ctx.shadowBlur = 0; ctx.fillStyle = '#fff'; ctx.font = '20px Arial'
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(icon, 0, 2)
+
+    let color = COLORS.dropWeapon
+    if (this.type === 'crystal') {
+      color = COLORS.crystal
+    } else if (this.type === 'health') {
+      color = COLORS.dropHealth
+    } else if (this.type === 'shield') {
+      color = COLORS.shield
+    } else if (this.type === 'wingman') {
+      color = COLORS.wingman
+    }
+
+    ctx.fillStyle = color
+    ctx.shadowColor = color
+    ctx.shadowBlur = 15
+    ctx.beginPath()
+    ctx.arc(0, 0, 16, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.shadowBlur = 0
+    ctx.fillStyle = '#fff'
+    ctx.font = '20px Arial'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(this.icon, 0, 2)
     ctx.restore()
   }
 }

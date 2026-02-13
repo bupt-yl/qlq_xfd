@@ -14,7 +14,7 @@ export default class Player {
     this.x = screenWidth / 2 - this.width / 2
     this.y = screenHeight - 100
     this.invulTimer = 0; this.shield = false; this.shieldAlpha = 0; this.wingmen = 0
-    this.activeWeapons = ['normal']
+    this.activeWeapons = databus.activeWeapons || ['normal']
     
     // === 核心修改：属性计算 ===
     if (databus.currentPlaneIndex >= databus.ownedPlanes.length) databus.currentPlaneIndex = 0

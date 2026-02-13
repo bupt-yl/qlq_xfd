@@ -1,5 +1,6 @@
 import { CONFIG, COLORS } from '../base/config.js'
 import DataBus from './databus.js'
+import { UPGRADE_DEFINITIONS } from './props.js'
 
 const databus = new DataBus()
 const screenWidth = wx.getSystemInfoSync().windowWidth
@@ -27,6 +28,10 @@ export default class UI {
       this.renderLevelSuccess(ctx)
     } else if (databus.gameStatus === 'playing') {
       this.renderHUD(ctx, player)
+      // 肉鸽强化选择界面
+      if (databus.isChoosingUpgrade) {
+        this.renderUpgradeSelection(ctx)
+      }
     }
   }
 
@@ -124,10 +129,52 @@ export default class UI {
     let timeLeft = Math.max(0, CONFIG.bossSpawnTime - Math.floor(databus.levelTime/60))
     if (!databus.bossActive) ctx.fillText(`Boss: ${timeLeft}s`, 120, 30)
     else { ctx.fillStyle = '#FF5252'; ctx.fillText(`BOSS FIGHT`, 120, 30) }
-    ctx.fillStyle = '#fff'; ctx.fillText(`HP: ${databus.hp}/${player.maxHp}`, 20, 60) 
+    ctx.fillStyle = '#fff'; ctx.fillText(`HP: ${databus.hp}/${player.maxHp}`, 20, 60)
     ctx.textAlign = 'right'; ctx.fillText(`Score: ${databus.score}`, screenWidth - 20, 30)
+
+    // 显示升级进度条
+    const expRequired = databus.getUpgradeExpRequired()
+    const expProgress = databus.killsThisLevel / expRequired
+    const barWidth = 150
+    const barHeight = 20
+    const barX = screenWidth - 20 - barWidth
+    const barY = 50
+
+    // 进度条背景
+    ctx.fillStyle = '#2d3436'
+    ctx.fillRect(barX, barY, barWidth, barHeight)
+
+    // 进度条填充
+    ctx.fillStyle = '#ffd700'
+    ctx.fillRect(barX, barY, barWidth * expProgress, barHeight)
+
+    // 边框
+    ctx.strokeStyle = '#ffd700'
+    ctx.lineWidth = 2
+    ctx.strokeRect(barX, barY, barWidth, barHeight)
+
+    // 文本
+    ctx.fillStyle = '#fff'
+    ctx.font = '12px Arial'
+    ctx.textAlign = 'center'
+    ctx.fillText(`升级 Lv.${databus.upgradeLevel} ${databus.killsThisLevel}/${expRequired}`, barX + barWidth / 2, barY + 15)
+
+    // 显示强化等级
+    let yOffset = 85
+    const upgradeTypes = ['bulletDamage', 'fireRate', 'laserFocus', 'multiShot', 'shieldRegen', 'criticalHit']
+    upgradeTypes.forEach(type => {
+      if (databus.upgrades[type] > 0) {
+        const def = UPGRADE_DEFINITIONS[type]
+        ctx.fillStyle = def.icon
+        ctx.font = '14px Arial'
+        ctx.textAlign = 'right'
+        ctx.fillText(`${def.icon} Lv.${databus.upgrades[type]}/${def.maxLevel}`, screenWidth - 20, yOffset)
+        yOffset += 20
+      }
+    })
+
     let weapons = player.activeWeapons
-    weapons.forEach((w, i) => { let c = COLORS['bullet'+w.charAt(0).toUpperCase()+w.slice(1)]; ctx.fillStyle = c; ctx.beginPath(); ctx.arc(screenWidth-20 - i*15, 60, 5, 0, Math.PI*2); ctx.fill() })
+    weapons.forEach((w, i) => { let c = COLORS['bullet'+w.charAt(0).toUpperCase()+w.slice(1)]; ctx.fillStyle = c; ctx.beginPath(); ctx.arc(screenWidth-20 - i*15, yOffset + 10, 5, 0, Math.PI*2); ctx.fill() })
   }
   
   renderLevelSuccess(ctx) {
@@ -163,14 +210,58 @@ export default class UI {
   renderSummonScreen(ctx) {
     this.drawBg(ctx, 'rgba(0,0,0,0.9)'); this.drawRes(ctx)
     if (this.summonResult) {
+      // 十连抽结果展示
+      if (Array.isArray(this.summonResult)) {
+        ctx.fillStyle = '#e17055'; ctx.font = 'bold 36px Arial'; ctx.textAlign='center'
+        ctx.fillText('十连结果', screenWidth/2, screenHeight*0.15)
+
+        // 显示10个结果（2行5列）
+        const results = this.summonResult
+        const startX = screenWidth / 2 - 140
+        const startY = screenHeight * 0.35
+        const spacing = 70
+
+        results.forEach((p, index) => {
+          const row = Math.floor(index / 5)
+          const col = index % 5
+          const x = startX + col * spacing
+          const y = startY + row * spacing
+
+          let c = COLORS['quality' + p.rank]
+          ctx.fillStyle = c
+          ctx.font = 'bold 30px Arial'
+          ctx.fillText(p.rank, x, y)
+          ctx.fillStyle = '#fff'
+          ctx.font = '12px Arial'
+          ctx.fillText(p.name, x, y + 20)
+        })
+
+        // 统计SSR数量
+        const ssrCount = results.filter(p => p.rank === 'SSR').length
+        if (ssrCount > 0) {
+          ctx.fillStyle = '#ffd700'
+          ctx.font = 'bold 24px Arial'
+          ctx.fillText(`🎉 获得 ${ssrCount} 架 SSR!`, screenWidth/2, screenHeight*0.8)
+        }
+
+        this.drawBtn(ctx, screenWidth/2, screenHeight*0.9, '收下', '#00b894')
+      } else {
+        // 单抽结果
         let p = this.summonResult; let c = COLORS['quality'+p.rank]
         ctx.fillStyle = c; ctx.font = 'bold 60px Arial'; ctx.textAlign='center'; ctx.fillText(p.rank, screenWidth/2, screenHeight*0.4)
         ctx.fillStyle = '#fff'; ctx.font = 'bold 30px Arial'; ctx.fillText(p.name, screenWidth/2, screenHeight*0.5)
         this.drawBtn(ctx, screenWidth/2, screenHeight*0.75, '收下', '#00b894')
+      }
     } else {
-        ctx.fillStyle = '#e17055'; ctx.font = 'bold 36px Arial'; ctx.textAlign='center'; ctx.fillText('神殿召唤', screenWidth/2, screenHeight*0.2)
-        this.drawBtn(ctx, screenWidth/2, screenHeight*0.7, `召唤 (${CONFIG.gachaCost})`, '#e17055')
-        this.drawBtn(ctx, screenWidth/2, screenHeight*0.85, '返回', '#555')
+      ctx.fillStyle = '#e17055'; ctx.font = 'bold 36px Arial'; ctx.textAlign='center'; ctx.fillText('神殿召唤', screenWidth/2, screenHeight*0.2)
+
+      // 单抽按钮
+      this.drawBtn(ctx, screenWidth/2, screenHeight*0.6, `召唤 (${CONFIG.gachaCost}💰)`, '#e17055')
+      // 十连抽按钮（打9折优惠）
+      const tenPullCost = Math.floor(CONFIG.gachaCost * 10 * 0.9)
+      this.drawBtn(ctx, screenWidth/2, screenHeight*0.73, `十连抽 (${tenPullCost}💰)`, '#ffd700')
+
+      this.drawBtn(ctx, screenWidth/2, screenHeight*0.88, '返回', '#555')
     }
   }
 
@@ -185,6 +276,90 @@ export default class UI {
   drawBg(ctx, color) { ctx.fillStyle = color; ctx.fillRect(0,0,screenWidth,screenHeight) }
   drawRes(ctx) { ctx.fillStyle = '#FFD700'; ctx.font = '20px Arial'; ctx.textAlign = 'left'; ctx.fillText(`💰 ${databus.coins}  💎 ${databus.crystals}`, 20, 40); ctx.textAlign = 'center' }
   drawBtn(ctx, x, y, text, color='#FF6B6B') { ctx.fillStyle = color; ctx.fillRect(x-100, y-25, 200, 50); ctx.fillStyle = '#fff'; ctx.font = '20px Arial'; ctx.textBaseline='middle'; ctx.textAlign='center'; ctx.fillText(text, x, y) }
+
+  // === 肉鸽强化选择界面 ===
+  renderUpgradeSelection(ctx) {
+    // 半透明遮罩
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.85)'
+    ctx.fillRect(0, 0, screenWidth, screenHeight)
+
+    const options = databus.availableUpgrades || []
+
+    // 如果没有可用的强化选项，直接返回（已在 handleDrop 中处理了奖励）
+    if (options.length === 0) {
+      return
+    }
+
+    // 标题
+    ctx.fillStyle = '#6C63FF'
+    ctx.font = 'bold 36px Arial'
+    ctx.textAlign = 'center'
+    ctx.fillText('🎁 选择强化', screenWidth / 2, screenHeight * 0.12)
+
+    // 渲染选项 - 自适应卡片大小
+    const padding = 10
+    const spacing = 15
+    const availableWidth = screenWidth - padding * 2
+
+    // 根据实际选项数量计算卡片宽度和起始位置
+    const optionCount = Math.min(options.length, 3)
+    const cardWidth = (availableWidth - spacing * (optionCount - 1)) / optionCount
+    const cardHeight = Math.min(cardWidth * 0.8, 180)
+    const totalWidth = cardWidth * optionCount + spacing * (optionCount - 1)
+    const startX = padding + cardWidth / 2 + (availableWidth - totalWidth) / 2
+
+    options.forEach((option, index) => {
+      const x = startX + index * (cardWidth + spacing)
+      const y = screenHeight * 0.45
+      const currentLevel = databus.upgrades[option.id] || 0
+      const isMaxLevel = currentLevel >= option.maxLevel
+      const isFullLevel = currentLevel === option.maxLevel - 1
+
+      // 卡片背景
+      ctx.fillStyle = isMaxLevel ? '#636e72' : (isFullLevel ? '#e17055' : '#2d3436')
+      ctx.strokeStyle = isFullLevel ? '#ffd700' : '#6C63FF'
+      ctx.lineWidth = isFullLevel ? 4 : 2
+      ctx.fillRect(x - cardWidth / 2, y - cardHeight / 2, cardWidth, cardHeight)
+      ctx.strokeRect(x - cardWidth / 2, y - cardHeight / 2, cardWidth, cardHeight)
+
+      // 图标（自适应大小）
+      const iconSize = Math.min(cardWidth * 0.25, 48)
+      ctx.font = `${Math.floor(iconSize)}px Arial`
+      ctx.fillText(option.icon, x, y - cardHeight * 0.25)
+
+      // 名称（自适应大小）
+      const nameSize = Math.min(cardWidth * 0.15, 24)
+      ctx.fillStyle = '#fff'
+      ctx.font = `bold ${Math.floor(nameSize)}px Arial`
+      ctx.fillText(option.name, x, y - cardHeight * 0.05)
+
+      // 等级
+      ctx.fillStyle = isMaxLevel ? '#aaa' : '#ffd700'
+      ctx.font = `${Math.floor(cardWidth * 0.12)}px Arial`
+      ctx.fillText(`Lv.${currentLevel}/${option.maxLevel}`, x, y + cardHeight * 0.1)
+
+      // 描述
+      ctx.fillStyle = '#ccc'
+      ctx.font = `${Math.floor(cardWidth * 0.1)}px Arial`
+      // 截断过长的描述
+      let desc = option.description
+      if (desc.length > 20) desc = desc.substring(0, 20) + '...'
+      ctx.fillText(desc, x, y + cardHeight * 0.25)
+
+      // 满级奖励描述
+      if (isMaxLevel) {
+        ctx.fillStyle = '#00b894'
+        ctx.font = `bold ${Math.floor(cardWidth * 0.1)}px Arial`
+        let bonus = option.maxBonusDescription
+        if (bonus.length > 18) bonus = bonus.substring(0, 18) + '...'
+        ctx.fillText(bonus, x, y + cardHeight * 0.38)
+      } else if (isFullLevel) {
+        ctx.fillStyle = '#ffd700'
+        ctx.font = `bold ${Math.floor(cardWidth * 0.1)}px Arial`
+        ctx.fillText('⭐ 下一级提升!', x, y + cardHeight * 0.38)
+      }
+    })
+  }
 
   onTouch(x, y) {
       const isBtn = (bx, by) => Math.abs(x - bx) < 100 && Math.abs(y - by) < 30
@@ -212,10 +387,18 @@ export default class UI {
            if (isBtn(screenWidth/2, screenHeight*0.92)) return 'CMD_BACK'    
       }
       else if (databus.gameStatus === 'summon') {
-          if (this.summonResult) { if (isBtn(screenWidth/2, screenHeight*0.75)) this.summonResult = null } 
+          if (this.summonResult) {
+            // 十连抽结果显示在0.9位置，单抽在0.75位置
+            if (Array.isArray(this.summonResult)) {
+              if (isBtn(screenWidth/2, screenHeight*0.9)) this.summonResult = null
+            } else {
+              if (isBtn(screenWidth/2, screenHeight*0.75)) this.summonResult = null
+            }
+          }
           else {
-              if (isBtn(screenWidth/2, screenHeight*0.7)) return 'CMD_DO_SUMMON'
-              if (isBtn(screenWidth/2, screenHeight*0.85)) return 'CMD_BACK'
+              if (isBtn(screenWidth/2, screenHeight*0.6)) return 'CMD_DO_SUMMON'
+              if (isBtn(screenWidth/2, screenHeight*0.73)) return 'CMD_DO_SUMMON_10'
+              if (isBtn(screenWidth/2, screenHeight*0.88)) return 'CMD_BACK'
           }
       }
       else if (databus.gameStatus === 'over') {
